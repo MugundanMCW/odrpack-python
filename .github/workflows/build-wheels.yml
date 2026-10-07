@@ -17,7 +17,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-14, macos-15-intel]
+        os: [ubuntu-latest, windows-latest, windows-11-arm, macos-14, macos-15-intel]
 
     steps:
       - name: Checkout code
@@ -34,20 +34,33 @@ jobs:
         run: |
           echo "MACOSX_DEPLOYMENT_TARGET=$(sw_vers -productVersion | cut -d '.' -f 1-2)" >> $GITHUB_ENV
           # This does not work inside CIBW_BEFORE_ALL_MACOS; Without it, the wheel repair fails.
-
-      - name: Windows - Set up pkg-config and CMake
-        if: runner.os == 'windows'
+      
+      - name: Windows - Install CMake & pkgconfig
+        if: runner.os == 'Windows'
         shell: bash
         run: |
           choco install cmake --version=3.31.5 --allow-downgrade -y --no-progress
           choco install -y --no-progress --stoponfirstfailure pkgconfiglite
+
+      - name: Windows - Set x86-64 PKG_CONFIG_PATH 
+        if: runner.os == 'Windows' && runner.arch == 'X64'
+        shell: bash
+        run: |
           echo "PKG_CONFIG_PATH=C:/mingw64/lib/pkgconfig" >> $GITHUB_ENV
+
+      - name: Windows ARM64 - Set up compilers and OpenBLAS
+        if: runner.os == 'Windows' && runner.arch == 'ARM64'
+        shell: pwsh
+        run: |
+          $VsVars = 'C:\Program Files\Microsoft Visual Studio\18\Enterprise\VC\Auxiliary\Build\vcvarsarm64.bat'
+          cmd /c "`"$VsVars`" && set" > "$env:RUNNER_TEMP\vcvars.txt"
+          ./cibw-scripts/setup_windows_arm64.ps1
 
       - name: Build wheels
         uses: pypa/cibuildwheel@v3.4.1
         env:
           # All cibuildwheel options are here (nothing "hidden" in pyproject.toml)
-          CIBW_SKIP: "*-win32 *i686 cp3??t-*"
+          CIBW_SKIP: "*-win32 *i686 cp3??t-* cp310-win_arm64"
           CIBW_BUILD_FRONTEND: build
           CIBW_BUILD_VERBOSITY: 3
           CIBW_TEST_REQUIRES: pytest scipy
@@ -65,6 +78,14 @@ jobs:
             pip install delvewheel
           CIBW_REPAIR_WHEEL_COMMAND_WINDOWS: |
             bash ./cibw-scripts/repair_wheel_command_windows.sh {wheel} {dest_dir}
+          CIBW_ENVIRONMENT_PASS_WINDOWS: >
+            CC
+            CXX
+            FC
+            AR
+            PKG_CONFIG_PATH
+            OPENBLAS_DIR
+            ODRPACK_WIN_ARM64
 
       - name: Upload wheels 
         uses: actions/upload-artifact@v6

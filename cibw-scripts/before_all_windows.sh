@@ -1,4 +1,16 @@
+#!/bin/bash
 set -xe
+
+# ARM64: compilers (CC/CXX/FC) and OpenBLAS are already set up by
+# cibw-scripts/setup_windows_arm64.ps1, so there is nothing to install here.
+if [[ -n "${ODRPACK_WIN_ARM64:-}" ]]; then
+    clang-cl --version
+    flang-new --version
+    pkg-config --modversion openblas
+    exit 0
+fi
+
+# x86-64: install OpenBLAS via MSYS2/MinGW.
 
 # Verify active compiler locations
 which gcc
